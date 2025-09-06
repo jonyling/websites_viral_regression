@@ -1,0 +1,66 @@
+file_path: './data/mini_project_1_data.csv'
+target_column: 'shares'
+numerical_features:
+  - 'timedelta' 
+  - 'n_tokens_title'
+  - 'n_tokens_content'
+  - 'n_unique_tokens'
+  - 'n_non_stop_words'
+  - 'n_non_stop_unique_tokens'
+  - 'num_hrefs'
+  - 'num_self_hrefs'
+  - 'num_imgs'
+  - 'num_videos'
+  - 'n_comments'
+  - 'average_token_length'
+  - 'self_reference_min_shares'
+  - 'self_reference_max_shares'
+  - 'self_reference_avg_shares'
+  - 'num_keywords'
+nominal_features:
+  - 'data_channel'
+  - 'weekday' 
+ordinal_features:
+  - 'kw_min_min_binned'
+  - 'kw_max_min_binned'
+  - 'kw_avg_min_binned' 
+  - 'kw_min_max_binned'
+  - 'kw_max_max_binned'
+  - 'kw_avg_max_binned'
+  - 'kw_min_avg_binned'
+  - 'kw_max_avg_binned'
+  - 'kw_avg_avg_binned'
+passthrough_features:
+dropped_features:
+  - 'ID' 
+  - 'URL'
+  - 'shares'
+val_test_size: 0.2
+val_size: 0.5
+RandomizedSearch_param:
+  param_grid:
+    regressor__alpha: [0.01, 0.1, 1, 10]
+    regressor__fit_intercept: [True, False]
+  n_iter: 10
+  cv: 5
+  scoring: r2
+  random_state: 42
+  n_jobs: -1
+RandomizedSearchStack_param:
+  base_models: 
+    - lasso
+    - rf
+    - lgb
+  stacking_param_dist_stack: 
+    - final_estimator__alpha: [0.01, 0.1, 1.0, 10.0]
+    - lasso__regressor__alpha: [0.01, 0.1, 1.0]
+    - rf__regressor__max_depth: [3, 5, 10]
+    - rf__regressor__n_estimators: [100, 200]
+    - lgb__regressor__learning_rate: [0.01, 0.1, 0.2]
+    - lgb__regressor__n_estimators: [31, 63]
+    - xgb__regressor__max_depth: [3, 5, 10]
+    - cat__regressor__depth: [4, 6, 8]
+  n_iter: 10
+  cv: 3
+  scoring: r2
+  n_jobs: -1

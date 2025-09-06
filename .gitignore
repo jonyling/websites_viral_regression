@@ -1,0 +1,5 @@
+myprojectenv/
+.ipynb_checkpoints/
+catboost_info/
+Z/
+/src/__pycache__/
