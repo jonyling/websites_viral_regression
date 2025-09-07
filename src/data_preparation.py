@@ -182,7 +182,7 @@ class DataPreparation:
         nominal_features = ['data_channel', 'weekday']
         nominal_transformer = Pipeline(steps=[('onehot', OneHotEncoder(handle_unknown='ignore'))])
 
-        ordinal_features = ['kw_min_min', 'kw_max_min', 'kw_avg_min', 'kw_min_max', 'kw_max_max', 'kw_avg_max', 'kw_min_avg', 'kw_max_avg', 'kw_avg_avg']
+        ordinal_features = ['kw_min_min_binned', 'kw_max_min_binned', 'kw_avg_min_binned', 'kw_min_max_binned', 'kw_max_max_binned', 'kw_avg_max_binned', 'kw_min_avg_binned', 'kw_max_avg_binned', 'kw_avg_avg_binned']
         kw_min_min_binned_order = ['low', 'medium', 'high']
         kw_max_min_binned_order = ['low', 'medium', 'high']
         kw_avg_min_binned_order = ['low', 'medium', 'high']
