@@ -133,15 +133,15 @@ The project uses a config.yaml file for configuration. Key parameters include:
 Edit config.yaml to customize the pipeline for your dataset.
 
 ## MLmodel_results
-- Metrics for ridge (tuned): {'r2': 0.27048155131467566, 'mae': 2399.844412168484, 'mse': 43860621.1804115, 'rmse': 6622.7351736583505}
-- Metrics for lasso (tuned): {'r2': 0.27294601143994734, 'mae': 2393.989056560649, 'mse': 43712451.1757138, 'rmse': 6611.539244057604}
-- Metrics for stacking (tuned): {'r2': 0.2730990507099713, 'mae': 2320.5490913096314, 'mse': 43703250.04110186, 'rmse': 6610.843368368506}
-- Metrics for weighted_voting: {'r2': 0.23502345954316606, 'mae': 2295.6145125379408, 'mse': 45992457.50857171, 'rmse': 6781.77392048509}
+- Metrics for ridge (tuned): {'r2': 0.2729621066847081, 'mae': 2411.3486878833355, 'mse': 43711483.48608987, 'rmse': 6611.466061781598}
+- Metrics for lasso (tuned): {'r2': 0.2770613881093875, 'mae': 2400.2120153197293, 'mse': 43465023.60559777, 'rmse': 6592.80089230653}
+- Metrics for stacking (tuned): {'r2': 0.2740736538924554, 'mae': 2317.990672932868, 'mse': 43644654.26320866, 'rmse': 6606.410088937006}
+- Metrics for weighted_voting: {'r2': 0.2645870770188695, 'mae': 2286.143248691736, 'mse': 44215012.90910862, 'rmse': 6649.4370370061115}
 - Final Test Metrics for Stacking Regressor (found to be the model yielding the best results)
-    - Mean Absolute Error (MAE) = 2285.3942557115906 
-    - Mean Squared Error (MSE) = 42685559.999009736
-    - Root Mean Squared Error (RMSE) = 6533.418706849404
-    - R-Squared (r2) = 0.3287087982196899 
+    - Mean Absolute Error (MAE) = 2347.6685851991674 
+    - Mean Squared Error (MSE) = 41747035.81436643
+    - Root Mean Squared Error (RMSE) = 6461.19461201769
+    - R-Squared (r2) = 0.34346842718610626 
 - Slight drop of r2 of Final Model compared to EDA is probably due to using RandomizedSearch instead of GridSearch. RandomizedSearch is used to be more efficient in compute time but with a slight drop in performance. 
 
 ## Contributing
