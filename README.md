@@ -1,10 +1,11 @@
 # jonyling-RegressionMiniProject
-# 'shares' Prediction - ML model to predict the number of sharings of online articles
+
+## 'shares' Prediction - ML model to predict the number of sharings of online articles
 
 A machine learning project to predict redict the number of sharings of online articles on mashable.com, using data preprocessing and model training pipelines. Built with Python, this project leverages libraries like Pandas, Scikit-learn, and YAML for configuration.
 
 Overview
-This repository contains the deliverables for the AIAP Foundation Classification Mini Project, addressing the objectives of predicting the number of shares (popularity) on social media platforms for the news articles using the dataset provided, and also to evaluate at least 3 suitable models for predicting the number of shares. 
+This repository contains the deliverables for the AIAP Foundation Classification Mini Project, addressing the objectives of predicting the number of shares (popularity) on social media platforms for the news articles using the dataset provided, and also to evaluate at least 3 suitable models for predicting the number of shares.
 
 Repository Structure
 
@@ -21,48 +22,52 @@ RegressionMiniProject
 └── README.md                   # This file
 
 ## Table of Contents
-- [Pipeline Execution Instructions](##PipelineExecutionInstructions)
-- [PipelineLogicalFlow](#PipelineLogicalFlow)
-- [Key_EDA_Findings_and_Pipeline_Choices](#Key_EDA_Findings_and_Pipeline_Choices)
-- [Model_Selection_and_Justification](#Model_Selection_and_Justification)
-- [Model_Evaluation](#Model_Evaluation)
+
+- [Pipeline Execution Instructions](#pipelineexecutioninstructions)
+- [PipelineLogicalFlow](#pipelinelogicalflow)
+- [Key_EDA_Findings_and_Pipeline_Choices](#key_eda_findings_and_pipeline_choices)
+- [Model_Selection_and_Justification](#model_selection_and_justification)
+- [Model_Evaluation](#model_evaluation)
 - [Configuration](#configuration)
-- [MLmodel_results](#MLmodel_results)
+- [MLmodel_results](#mlmodel_results)
 - [Contributing](#contributing)
 - [License](#license)
 - [Contact](#contact)
 
 ## PipelineExecutionInstructions
+
 Setup:
+
 - Ensure Python 3.11+ is installed.
 - Place mini_project_1_data.csv in the data/ folder (relative path: data/mini_project_1_data.csv).
 - Install dependencies: pip install -r requirements.txt.
 - Execute the main.py: This runs data_preparation.py to clean data, split data and create the preprocessor. This is followed running model_training.py to train and evaluate for base models, then tuned models, and finally the final model.
-- Modify Parameters: Edit src/config.yaml to adjust model hyperparameters, feature selections, or preprocessing steps. Example: Change regressor__alpha for RandomizedSearch. 
+- Modify Parameters: Edit src/config.yaml to adjust model hyperparameters, feature selections, or preprocessing steps. Example: Change regressor__alpha for RandomizedSearch.
 
 ## PipelineLogicalFlow
+
 - Data Loading: Load data from data/mini_project_1_data.csv.
 - Data Preprocessing:
-    - KNN-impute missing values: 'kw_avg_min', 'n_non_stop_unique_tokens', 'data_channel'.
-    - Median-impute missing values: 'num_hrefs', 'num_self_hrefs', 'num_imgs', 'num_videos', 'self_reference_max_shares', 'self_reference_avg_shares'. 
-    - Clip into {0, 50000}: 'kw_avg_min'
-- Feature engineering: 
-    - Bin into 'low', 'medium', 'high': 'kw_min_min', 'kw_max_min', 'kw_avg_min', 'kw_min_max', 'kw_max_max', 'kw_avg_max', 'kw_min_avg', 'kw_max_avg', 'kw_avg_avg'
-    - Drop features: 'ID', 'URL', 'shares'.
+  - KNN-impute missing values: 'kw_avg_min', 'n_non_stop_unique_tokens', 'data_channel'.
+  - Median-impute missing values: 'num_hrefs', 'num_self_hrefs', 'num_imgs', 'num_videos', 'self_reference_max_shares', 'self_reference_avg_shares'.
+  - Clip into {0, 50000}: 'kw_avg_min'
+- Feature engineering:
+  - Bin into 'low', 'medium', 'high': 'kw_min_min', 'kw_max_min', 'kw_avg_min', 'kw_min_max', 'kw_max_max', 'kw_avg_max', 'kw_min_avg', 'kw_max_avg', 'kw_avg_avg'
+  - Drop features: 'ID', 'URL', 'shares'.
 - Split Data:
-    - Split data with 80/10/10 proportion for training, validation and test sets.
+  - Split data with 80/10/10 proportion for training, validation and test sets.
 - Build Pipelines
-    - Numerical features =  ['timedelta', 'n_tokens_title', 'n_tokens_content', 'n_unique_tokens', 'n_non_stop_words', 'n_non_stop_unique_tokens', 'num_hrefs', 'num_self_hrefs', 'num_imgs', 'num_videos', 'n_comments', 
+  - Numerical features =  ['timedelta', 'n_tokens_title', 'n_tokens_content', 'n_unique_tokens', 'n_non_stop_words', 'n_non_stop_unique_tokens', 'num_hrefs', 'num_self_hrefs', 'num_imgs', 'num_videos', 'n_comments',
                               'average_token_length', 'self_reference_min_shares', 'self_reference_max_shares', 'self_reference_avg_shares', 'num_keywords']
-    - Ordinal features = ['kw_min_min', 'kw_max_min', 'kw_avg_min', 'kw_min_max', 'kw_max_max', 'kw_avg_max', 'kw_min_avg', 'kw_max_avg', 'kw_avg_avg']
-    - Nominal features = ['data_channel', 'weekday']
-- Baseline Models Training: 
-    - Train three models: Ridge, Lasso, Stacking (using Lasso, RandomForest, LightGBM).
-- Tuned Models Training: 
-    - Train five models: Ridge, Lasso and Stacking (using Lasso, RandomForest, LightGBM, XGB and CatBoost) and tune hyperparameters with RandomizedSearchCV. Lastly, VotingRegressor for an additional model. 
+  - Ordinal features = ['kw_min_min', 'kw_max_min', 'kw_avg_min', 'kw_min_max', 'kw_max_max', 'kw_avg_max', 'kw_min_avg', 'kw_max_avg', 'kw_avg_avg']
+  - Nominal features = ['data_channel', 'weekday']
+- Baseline Models Training:
+  - Train three models: Ridge, Lasso, Stacking (using Lasso, RandomForest, LightGBM).
+- Tuned Models Training:
+  - Train five models: Ridge, Lasso and Stacking (using Lasso, RandomForest, LightGBM, XGB and CatBoost) and tune hyperparameters with RandomizedSearchCV. Lastly, VotingRegressor for an additional model.
 - Evaluation:
-    - Firstly, evaluate models using MAE, MSE RMSE and R2, then secondly, evaluate models with a focus on RMSE and MAE (less sensitive to outliers in skewed 'shares') alongside R². It uses cross_val_score from scikit-learn for robust validation across folds. 
-    - Final Test Metrics: {'MAE': 2285.3942557115906, 'MSE': 42685559.999009736, 'RMSE': 6533.418706849404, 'r2': 0.3287087982196899}
+  - Firstly, evaluate models using MAE, MSE RMSE and R2, then secondly, evaluate models with a focus on RMSE and MAE (less sensitive to outliers in skewed 'shares') alongside R². It uses cross_val_score from scikit-learn for robust validation across folds.
+  - Final Test Metrics: {'MAE': 2285.3942557115906, 'MSE': 42685559.999009736, 'RMSE': 6533.418706849404, 'r2': 0.3287087982196899}
 - Visualization: Below is a simplified flowchart of the pipeline:
     graph TD
         A[Load Data] --> B[Preprocess Data]
@@ -74,7 +79,8 @@ Setup:
         G --> H[Evaluation ]
 
 ## Key_EDA_Findings_and_Pipeline_Choices
-- Data Quality: Missing values: 
+
+- Data Quality: Missing values:
     num_hrefs                      721
     num_self_hrefs                 721
     self_reference_min_shares      721
@@ -84,16 +90,17 @@ Setup:
     num_videos                   16755
     data_channel                  5462
 
-    It is likely that the features with 721 NaN values are highly related to one another, and are missing together during data input. 
+    It is likely that the features with 721 NaN values are highly related to one another, and are missing together during data input.
 
     '0' value, which is not logical given the nature of the features: n_non_stop_words, n_non_stop_unique_tokens, average_token_length. It is likely that the features with 721 NaN values are highly related to one another, and are missing together during data input but input as 0.
-- 'ID': There are 3553 rows where there is a gap size of more than 1 between 'ID' and the previous 'ID'. Suspicion that there are nearly 4000 missing rows of data on top of the 35,680 existing. 
-- Both 'URL' from which the date of article publishing and timedelta indicate that there is a fairly consistent rate of 30 articles every month. 
-- Target variable 'shares': Values range from 4 to 843,300; extremely wide range. 
+- 'ID': There are 3553 rows where there is a gap size of more than 1 between 'ID' and the previous 'ID'. Suspicion that there are nearly 4000 missing rows of data on top of the 35,680 existing.
+- Both 'URL' from which the date of article publishing and timedelta indicate that there is a fairly consistent rate of 30 articles every month.
+- Target variable 'shares': Values range from 4 to 843,300; extremely wide range.
 - Feature Engineering:
-    - 'kw_min_min', 'kw_max_min', 'kw_avg_min', 'kw_min_max', 'kw_max_max', 'kw_avg_max', 'kw_min_avg', 'kw_max_avg', 'kw_avg_avg' were binned into 'low', 'medium', 'high' buckets, because the maximum values were extremely high and binning the values would mitigate the huge gaps in values.    
+  - 'kw_min_min', 'kw_max_min', 'kw_avg_min', 'kw_min_max', 'kw_max_max', 'kw_avg_max', 'kw_min_avg', 'kw_max_avg', 'kw_avg_avg' were binned into 'low', 'medium', 'high' buckets, because the maximum values were extremely high and binning the values would mitigate the huge gaps in values.
 
 ## Model_Selection_and_Justification
+
 - 10 different models are used in the EDA and the best results, in terms of r2, of each are:
     Linear Regression           0.273
     Ridge Regression            0.345
@@ -106,23 +113,25 @@ Setup:
     Gradient Boosting           0.273
     Neural Network              0.273
 
-    It is obvious that the top 3 models are Ridge, Lasso and Stacking regressors. 
+    It is obvious that the top 3 models are Ridge, Lasso and Stacking regressors.
 - It might be due to the following reasons:
-    - Ridge and Lasso work best due to their regularization, which mitigates overfitting and handles multicollinearity/noisy features in your data. 
-    - Stacking outperforms by combining these strengths with non-linear models, optimizing via a meta-learner—ideal for the dataset’s mixed signal. 
-    - Other models:
-        - RandomForest: While strong for non-linear data, it might overfit on the dataset’s noise (e.g., outlier 'shares' >843k) without sufficient tuning or pruning. Its R² might lag behind Stacking because it doesn’t benefit from the meta-learner’s optimization or Lasso’s feature selection.
-        - LGBM/XGBoost Alone: These gradient-boosting models excel with large datasets or heavy tuning, but the ~35k rows and moderate feature set might not fully exploit their capacity. Without extensive hyperparameter tuning (e.g., num_leaves, max_depth), they could underperform compared to Stacking, which harnesses their strengths alongside others. Early stopping helps, but the ensemble effect dominates.
-        - Neural Network likely underperforms due to limited data, a noisy/skewed target, and lack of tailored tuning, making them less effective than Ridge (regularization), Lasso (feature selection), and Stacking (ensemble diversity) for the dataset. With significant effort in preprocessing and tuning, an NN could approach Stacking’s R², but it’s currently less practical given the setup.
+  - Ridge and Lasso work best due to their regularization, which mitigates overfitting and handles multicollinearity/noisy features in your data.
+  - Stacking outperforms by combining these strengths with non-linear models, optimizing via a meta-learner—ideal for the dataset’s mixed signal.
+  - Other models:
+    - RandomForest: While strong for non-linear data, it might overfit on the dataset’s noise (e.g., outlier 'shares' >843k) without sufficient tuning or pruning. Its R² might lag behind Stacking because it doesn’t benefit from the meta-learner’s optimization or Lasso’s feature selection.
+    - LGBM/XGBoost Alone: These gradient-boosting models excel with large datasets or heavy tuning, but the ~35k rows and moderate feature set might not fully exploit their capacity. Without extensive hyperparameter tuning (e.g., num_leaves, max_depth), they could underperform compared to Stacking, which harnesses their strengths alongside others. Early stopping helps, but the ensemble effect dominates.
+    - Neural Network likely underperforms due to limited data, a noisy/skewed target, and lack of tailored tuning, making them less effective than Ridge (regularization), Lasso (feature selection), and Stacking (ensemble diversity) for the dataset. With significant effort in preprocessing and tuning, an NN could approach Stacking’s R², but it’s currently less practical given the setup.
 
 ## Model_Evaluation
+
 - Using the following metrics to evaluate the models:
-    - Mean Absolute Error (MAE) 
-    - Mean Squared Error (MSE) 
-    - Root Mean Squared Error (RMSE) 
-    - R-Squared (r2)
+  - Mean Absolute Error (MAE)
+  - Mean Squared Error (MSE)
+  - Root Mean Squared Error (RMSE)
+  - R-Squared (r2)
 
 ## Configuration
+
 The project uses a config.yaml file for configuration. Key parameters include:
     file_path: Path to the dataset (e.g., mini_project_1_data.csv).
     target_column: The column to predict (e.g., shares).
@@ -133,18 +142,20 @@ The project uses a config.yaml file for configuration. Key parameters include:
 Edit config.yaml to customize the pipeline for your dataset.
 
 ## MLmodel_results
+
 - Metrics for ridge (tuned): {'r2': 0.2729621066847081, 'mae': 2411.3486878833355, 'mse': 43711483.48608987, 'rmse': 6611.466061781598}
 - Metrics for lasso (tuned): {'r2': 0.2770613881093875, 'mae': 2400.2120153197293, 'mse': 43465023.60559777, 'rmse': 6592.80089230653}
 - Metrics for stacking (tuned): {'r2': 0.2740736538924554, 'mae': 2317.990672932868, 'mse': 43644654.26320866, 'rmse': 6606.410088937006}
 - Metrics for weighted_voting: {'r2': 0.2645870770188695, 'mae': 2286.143248691736, 'mse': 44215012.90910862, 'rmse': 6649.4370370061115}
 - Final Test Metrics for Stacking Regressor (found to be the model yielding the best results)
-    - Mean Absolute Error (MAE) = 2347.6685851991674 
-    - Mean Squared Error (MSE) = 41747035.81436643
-    - Root Mean Squared Error (RMSE) = 6461.19461201769
-    - R-Squared (r2) = 0.34346842718610626 
-- Slight drop of r2 of Final Model compared to EDA is probably due to using RandomizedSearch instead of GridSearch. RandomizedSearch is used to be more efficient in compute time but with a slight drop in performance. 
+  - Mean Absolute Error (MAE) = 2347.6685851991674
+  - Mean Squared Error (MSE) = 41747035.81436643
+  - Root Mean Squared Error (RMSE) = 6461.19461201769
+  - R-Squared (r2) = 0.34346842718610626
+- Slight drop of r2 of Final Model compared to EDA is probably due to using RandomizedSearch instead of GridSearch. RandomizedSearch is used to be more efficient in compute time but with a slight drop in performance.
 
 ## Contributing
+
 We welcome contributions! To contribute:
     Fork the repository.
     Create a new branch (git checkout -b feature/your-feature-name).
@@ -154,11 +165,13 @@ We welcome contributions! To contribute:
 Please follow our Code of Conduct (CODE_OF_CONDUCT.md) and ensure code adheres to PEP 8 style guidelines.
 
 ## License
+
 This project is licensed under the MIT License (LICENSE).
 
-## Contact 
+## Contact
+
 For questions or feedback, reach out to:
-    Email: jonyling@hotmail.com
+    Email: <jonyling@hotmail.com>
     GitHub: jonyling
     X: @JonyLing1
 
