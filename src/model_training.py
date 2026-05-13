@@ -1,308 +1,272 @@
 import logging
-from typing import Any, Dict, Tuple
+from pathlib import Path
+from typing import Dict
+
+import joblib
+import lightgbm as lgb # type: ignore
 import numpy as np
 import pandas as pd
+import xgboost as xgb
+from sklearn.base import clone
 from sklearn.compose import ColumnTransformer
-from sklearn.linear_model import Lasso, Ridge
+from sklearn.ensemble import RandomForestRegressor, StackingRegressor
+from sklearn.linear_model import LinearRegression, Ridge
 from sklearn.metrics import (
     mean_absolute_error,
+    mean_absolute_percentage_error,
     mean_squared_error,
     r2_score,
-    root_mean_squared_error,
 )
+from sklearn.model_selection import RandomizedSearchCV
 from sklearn.pipeline import Pipeline
-import statsmodels.api as sm
-import lightgbm as lgb
-from sklearn.metrics import make_scorer, r2_score, mean_absolute_error, mean_squared_error
-from sklearn.model_selection import RandomizedSearchCV, cross_val_score
-from sklearn.linear_model import Ridge, Lasso
-from sklearn.ensemble import StackingRegressor, RandomForestRegressor
-from xgboost import XGBRegressor
-from catboost import CatBoostRegressor
-from sklearn.ensemble import VotingRegressor
+
+
+LOGGER = logging.getLogger(__name__)
+
 
 class ModelTraining:
-    """
-    A class used to train and evaluate machine learning models to predict the number of 'shares' of articles on mashable.com.
+    """Train and evaluate the regression models developed in the EDA notebook."""
 
-    Attributes:
-    -----------
-    config : Dict[str, Any]
-        Configuration dictionary containing parameters for model training and evaluation.
-    preprocessor : sklearn.compose.ColumnTransformer
-        A preprocessor pipeline for transforming numerical, nominal, and ordinal features.
-    """
-
-    def __init__(self, config: Dict[str, Any], preprocessor: ColumnTransformer):
-        """
-        Initialize the ModelTraining class with configuration and preprocessor.
-
-        Args:
-        -----
-        config (Dict[str, Any]): Configuration dictionary containing parameters for model training and evaluation.
-        preprocessor (sklearn.compose.ColumnTransformer): A preprocessor pipeline for transforming numerical, nominal, and ordinal features.
-        """
-        self.config = config
+    def __init__(
+        self,
+        preprocessor: ColumnTransformer,
+        random_state: int = 42,
+        use_gpu: bool = False,
+    ):
         self.preprocessor = preprocessor
+        self.random_state = random_state
+        self.use_gpu = use_gpu
 
-    def train_and_evaluate_for_baseline_models(
+    def build_baseline_models(self) -> Dict[str, Pipeline]:
+        lgb_params = self._lgb_params(n_estimators=100, learning_rate=0.1, max_depth=5)
+        return {
+            "linear_regression": Pipeline(
+                [
+                    ("preprocessor", clone(self.preprocessor)),
+                    ("regressor", LinearRegression()),
+                ]
+            ),
+            "ridge": Pipeline(
+                [
+                    ("preprocessor", clone(self.preprocessor)),
+                    ("regressor", Ridge(alpha=1.0)),
+                ]
+            ),
+            "xgboost": Pipeline(
+                [
+                    ("preprocessor", clone(self.preprocessor)),
+                    (
+                        "regressor",
+                        xgb.XGBRegressor(
+                            objective="reg:squarederror",
+                            n_estimators=100,
+                            learning_rate=0.1,
+                            max_depth=5,
+                            random_state=self.random_state,
+                            n_jobs=-1,
+                        ),
+                    ),
+                ]
+            ),
+            "lightgbm": Pipeline(
+                [
+                    ("preprocessor", clone(self.preprocessor)),
+                    ("regressor", lgb.LGBMRegressor(**lgb_params)),
+                ]
+            ),
+            "random_forest": Pipeline(
+                [
+                    ("preprocessor", clone(self.preprocessor)),
+                    (
+                        "regressor",
+                        RandomForestRegressor(
+                            n_estimators=100,
+                            max_depth=5,
+                            random_state=self.random_state,
+                            n_jobs=-1,
+                        ),
+                    ),
+                ]
+            ),
+        }
+
+    def train_baselines(
         self,
         X_train: pd.DataFrame,
         y_train: pd.Series,
         X_val: pd.DataFrame,
         y_val: pd.Series,
-    ) -> Tuple[Dict[str, Pipeline], Dict[str, Dict[str, float]]]:
-        """
-        Create, train, and evaluate baseline models.
-
-        Args:
-        -----
-        X_train (pd.DataFrame): The training features.
-        y_train (pd.Series): The training target variable.
-        X_val (pd.DataFrame): The validation features.
-        y_val (pd.Series): The validation target variable.
-
-        Returns:
-        --------
-        Tuple[Dict[str, Pipeline], Dict[str, Dict[str, float]]]: A tuple containing the trained pipelines and their evaluation metrics.
-        """
-        logging.info("Training and evaluating baseline models.")
-
-        pipelines = {}
+    ) -> tuple[Dict[str, Pipeline], Dict[str, Dict[str, float]]]:
+        models = self.build_baseline_models()
         metrics = {}
+        for name, model in models.items():
+            LOGGER.info("Training %s.", name)
+            model.fit(X_train, y_train)
+            metrics[name] = self.evaluate_log_scale(model, X_val, y_val)
+            LOGGER.info("%s validation metrics: %s", name, metrics[name])
+        return models, metrics
 
-        model_name = ["ridge", "lasso", "stacking"]
+    def tune_lightgbm(
+        self,
+        X_train: pd.DataFrame,
+        y_train: pd.Series,
+        X_val: pd.DataFrame,
+        y_val: pd.Series,
+        n_iter: int = 30,
+        cv: int = 5,
+    ) -> tuple[Pipeline, Dict[str, float]]:
+        """Tune LightGBM with the notebook's RandomizedSearchCV search space."""
+        pipeline = Pipeline(
+            [
+                ("preprocessor", clone(self.preprocessor)),
+                ("regressor", lgb.LGBMRegressor(**self._lgb_params())),
+            ]
+        )
+        param_dist = {
+            "regressor__n_estimators": [200, 300, 400, 500, 600, 700],
+            "regressor__learning_rate": [0.01, 0.0166, 0.03, 0.05, 0.08, 0.1],
+            "regressor__max_depth": [5, 7, 8, 9, 11, -1],
+            "regressor__num_leaves": [31, 63, 127, 223, 255],
+            "regressor__subsample": [0.7, 0.8, 0.9, 1.0],
+            "regressor__colsample_bytree": [0.7, 0.8, 0.9, 1.0],
+            "regressor__reg_alpha": [0, 0.1, 1, 1.4463, 5],
+            "regressor__reg_lambda": [0, 0.1, 1, 1.7608, 5],
+            "regressor__min_child_samples": [5, 10, 11, 20, 30],
+        }
+        search = RandomizedSearchCV(
+            estimator=pipeline,
+            param_distributions=param_dist,
+            n_iter=n_iter,
+            cv=cv,
+            scoring="r2",
+            random_state=self.random_state,
+            n_jobs=-1,
+            verbose=1,
+        )
+        LOGGER.info("Starting LightGBM tuning: n_iter=%s, cv=%s.", n_iter, cv)
+        search.fit(X_train, y_train)
+        best_model = search.best_estimator_
+        metrics = self.evaluate_log_scale(best_model, X_val, y_val)
+        LOGGER.info("Best LightGBM params: %s", search.best_params_)
+        LOGGER.info("Tuned LightGBM validation metrics: %s", metrics)
+        return best_model, metrics # type: ignore
 
-        # Model-1 -> Ridge Regression
-        ridge_pipeline = Pipeline(steps=[
-            ('preprocessor', self.preprocessor), 
-            ('regressor', Ridge(alpha=1))
-        ])
-        ridge_pipeline.fit(X_train, y_train)
-        metrics["ridge"] = self._evaluate_model(ridge_pipeline, X_val, y_val, model_name="ridge")
-                
-        # Model-2 -> Lasso Regression
-        lasso_pipeline = Pipeline(steps=[
-            ('preprocessor', self.preprocessor), 
-            ('regressor', Ridge(alpha=1))
-        ])
-        lasso_pipeline.fit(X_train, y_train)
-        metrics["lasso"] = self._evaluate_model(lasso_pipeline, X_val, y_val, model_name="lasso")
-
-        # Model-3 -> Stacking Regression
-        # Define base models for StackingRegressor
-        lasso_pipeline1 = Pipeline(steps=[('preprocessor', self.preprocessor), ('regressor', Lasso(random_state=42))])
-        rf_pipeline = Pipeline(steps=[('preprocessor', self.preprocessor), ('regressor', RandomForestRegressor(random_state=42))])
-        lgb_pipeline = Pipeline(steps=[('preprocessor', self.preprocessor), ('regressor', lgb.LGBMRegressor(random_state=42))])
-
-        base_models = [
-            ('lasso', lasso_pipeline1),
-            ('rf', rf_pipeline),
-            ('lgb', lgb_pipeline)
-        ]
-
-        meta_model = Ridge()
-
-        # Create stacking regressor
-        stacking_regressor = StackingRegressor(
-            estimators=base_models,
-            final_estimator=meta_model,
-            cv=3,  # Number of cross-validation folds for base predictions
-            n_jobs=-1,  # Parallelize fitting of base models
-            passthrough=False  # Do not pass original features to meta-model
+    def build_notebook_lightgbm(self) -> Pipeline:
+        """Build the final Optuna-style LightGBM from the notebook's last cells."""
+        return Pipeline(
+            [
+                ("preprocessor", clone(self.preprocessor)),
+                (
+                    "regressor",
+                    lgb.LGBMRegressor(
+                        **self._lgb_params(
+                            n_estimators=700,
+                            learning_rate=0.016600250862150365,
+                            max_depth=8,
+                            num_leaves=223,
+                            subsample=0.7049040912171848,
+                            colsample_bytree=0.7088913513342914,
+                            reg_alpha=1.4463103990967312,
+                            reg_lambda=1.7607633224319064,
+                            min_child_samples=11,
+                        )
+                    ),
+                ),
+            ]
         )
 
-        # Fit the stacking regressor
-        stacking_regressor.fit(X_train, y_train)
-
-        metrics["stacking"] = self._evaluate_model(stacking_regressor, X_val, y_val, model_name="stacking")
-                        
-        return pipelines, metrics
-    
-    def train_and_evaluate_for_tuned_models(
-    self,
-    X_train: pd.DataFrame,
-    y_train: pd.Series,
-    X_val: pd.DataFrame,
-    y_val: pd.Series,
-    ) -> Tuple[Dict[str, Pipeline], Dict[str, Dict[str, float]]]:
-        """
-        Perform hyperparameter tuning for Ridge, Lasso, and Stacking models and evaluate them.
-
-        Args:
-        -----
-        X_train (pd.DataFrame): The training features.
-        y_train (pd.Series): The training target variable.
-        X_val (pd.DataFrame): The validation features.
-        y_val (pd.Series): The validation target variable.
-
-        Returns:
-        --------
-        Tuple[Dict[str, Pipeline], Dict[str, Dict[str, float]]]: A tuple containing the tuned pipelines and their evaluation metrics.
-        """
-        logging.info("Starting hyperparameter tuning.")
-        tuned_models = {}
-        tuned_metrics = {}
-
-        # Define parameter grids for each model
-        ridge_lasso_param_grid = self.config["RandomizedSearch_param"]["param_grid"]  # From your config.yaml
-        stacking_param_grid = {
-            'final_estimator__alpha': [0.01, 0.1, 1.0, 10.0],  # Ridge meta-model
-            'lasso__regressor__alpha': [0.01, 0.1, 1.0],      # Lasso base model
-            'rf__regressor__max_depth': [3, 5, 10],           # Random Forest base model
-            'lgb__regressor__learning_rate': [0.01, 0.1, 0.2],  # LightGBM base model
-            'xgb__regressor__max_depth': [3, 5, 10],  # Added for XGBoost
-            'cat__regressor__depth': [4, 6, 8]  # Added for CatBoost
-        }
-
-        # Define base models for StackingRegressor
-        lasso_pipeline = Pipeline(steps=[('preprocessor', self.preprocessor), ('regressor', Lasso(random_state=42))])
-        rf_pipeline = Pipeline(steps=[('preprocessor', self.preprocessor), ('regressor', RandomForestRegressor(random_state=42))])
-        lgb_pipeline = Pipeline(steps=[('preprocessor', self.preprocessor), ('regressor', lgb.LGBMRegressor(random_state=42))])
-        xgb_pipeline = Pipeline(steps=[('preprocessor', self.preprocessor), ('regressor', XGBRegressor(random_state=42))])  # Added XGBoost
-        cat_pipeline = Pipeline(steps=[('preprocessor', self.preprocessor), ('regressor', CatBoostRegressor(random_state=42, verbose=0))])  # Added CatBoost
-        
-        base_models = [
-            ('lasso', lasso_pipeline),
-            ('rf', rf_pipeline),
-            ('lgb', lgb_pipeline), 
-            ('xgb', xgb_pipeline),  # Added for diversity
-            ('cat', cat_pipeline)   # Added for diversity
+    def build_stacking_model(self, best_lgb: Pipeline) -> StackingRegressor:
+        estimators = [
+            ("lgb", best_lgb),
+            (
+                "xgb",
+                Pipeline(
+                    [
+                        ("preprocessor", clone(self.preprocessor)),
+                        (
+                            "regressor",
+                            xgb.XGBRegressor(
+                                objective="reg:squarederror",
+                                n_estimators=300,
+                                learning_rate=0.05,
+                                max_depth=7,
+                                random_state=self.random_state,
+                                n_jobs=-1,
+                            ),
+                        ),
+                    ]
+                ),
+            ),
+            (
+                "ridge",
+                Pipeline(
+                    [
+                        ("preprocessor", clone(self.preprocessor)),
+                        ("regressor", Ridge(alpha=1.0)),
+                    ]
+                ),
+            ),
         ]
+        return StackingRegressor(
+            estimators=estimators,
+            final_estimator=Ridge(alpha=0.5),
+            cv=5,
+            n_jobs=-1,
+        )
 
-        # Define models
-        models = {
-            "ridge": Pipeline(steps=[('preprocessor', self.preprocessor), ('regressor', Ridge())]),
-            "lasso": Pipeline(steps=[('preprocessor', self.preprocessor), ('regressor', Lasso(random_state=42))]),
-            "stacking": StackingRegressor(
-                estimators=base_models,
-                final_estimator=Ridge(),
-                cv=3,
-                n_jobs=-1
-            )
-        }
-
-        # Hyperparameter tuning settings
-        cv = self.config["RandomizedSearch_param"]["cv"]  # e.g., 3
-        scoring = self.config["RandomizedSearch_param"]["scoring"]  # e.g., 'r2'
-        n_jobs = self.config["RandomizedSearch_param"]["n_jobs"]  # e.g., -1
-        n_iter = self.config["RandomizedSearch_param"]["n_iter"]  # Reduced to 5for faster runtime
-
-        for model_name, model in models.items():
-            # Use appropriate param_grid
-            param_grid = ridge_lasso_param_grid if model_name in ["ridge", "lasso"] else stacking_param_grid
-
-            # Use RandomizedSearchCV for efficiency
-            search = RandomizedSearchCV(
-                model,
-                param_grid,
-                n_iter=n_iter,
-                cv=cv,
-                scoring=scoring,
-                n_jobs=n_jobs,
-                random_state=42,
-                verbose=2
-            )
-            search.fit(X_train, y_train)
-            tuned_models[model_name] = search.best_estimator_
-            tuned_metrics[model_name] = self._evaluate_model(
-                tuned_models[model_name], X_val, y_val, model_name + " (tuned)"
-            )
-        
-        # Weighted VotingRegressor based on baseline R²
-        # Assume baseline R² from previous evaluations (replace with actual values)
-        baseline_r2 = {'lasso': 0.342, 'rf': 0.3, 'lgb': 0.35, 'xgb': 0.34, 'cat': 0.33}  # Example; calculate from baselines
-        weights = [baseline_r2[name.split('__')[0]] for name, _ in base_models]  # Weights based on baseline R²
-        voting = VotingRegressor(estimators=base_models, weights=weights, n_jobs=-1)
-        voting.fit(X_train, y_train)
-        tuned_models["weighted_voting"] = voting
-        tuned_metrics["weighted_voting"] = self._evaluate_model(voting, X_val, y_val, "weighted_voting")
-
-        logging.info("Hyperparameter tuning completed.")
-        return tuned_models, tuned_metrics
-
-    def _evaluate_model(self, model, X_val, y_val, model_name: str) -> Dict[str, float]:
-        """
-        Evaluate a model on validation data and return metrics.
-
-        Args:
-            model: Trained model or pipeline.
-            X_val (pd.DataFrame): Validation features.
-            y_val (pd.Series): Validation target.
-            model_name (str): Name of the model for logging.
-
-        Returns:
-            Dict[str, float]: Dictionary of evaluation metrics (R², MAE, MSE, RMSE).
-        """
-        y_pred = model.predict(X_val)
+    def select_best_model(
+        self,
+        candidates: Dict[str, object],
+        X_val: pd.DataFrame,
+        y_val: pd.Series,
+    ) -> tuple[str, object, Dict[str, Dict[str, float]]]:
         metrics = {
-            'r2': r2_score(y_val, y_pred),
-            'mae': mean_absolute_error(y_val, y_pred),
-            'mse': mean_squared_error(y_val, y_pred),
-            'rmse': np.sqrt(mean_squared_error(y_val, y_pred))
+            name: self.evaluate_log_scale(model, X_val, y_val)
+            for name, model in candidates.items()
         }
-        logging.info(f"Metrics for {model_name}: {metrics}")
-        return metrics
+        best_name = max(metrics, key=lambda name: metrics[name]["r2"])
+        return best_name, candidates[best_name], metrics
 
-    def evaluate_final_model(
-        self, model: Pipeline, X_test: pd.DataFrame, y_test: pd.Series, X: pd.DataFrame, y: pd.Series, X_train: pd.DataFrame, y_train: pd.Series, model_name: str
+    def evaluate_log_scale(
+        self, model: object, X: pd.DataFrame, y: pd.Series
     ) -> Dict[str, float]:
-        """
-        Evaluate the final model on the test set and log the metrics.
-
-        Args:
-        -----
-        model (Pipeline): The trained model pipeline.
-        X_test (pd.DataFrame): The test features.
-        y_test (pd.Series): The test target variable.
-        model_name (str): The name of the model being evaluated.
-
-        Returns:
-        --------
-        Dict[str, float]: A dictionary containing the evaluation metrics.
-        """
-        y_pred = model.predict(X_test)
-        # Define custom scorers for RMSE and MAE (negative for cross_val_score to maximize)
-        def rmse(y_true, y_pred):
-            return np.sqrt(mean_squared_error(y_true, y_pred))
-
-        rmse_scorer = make_scorer(rmse, greater_is_better=False)  # Negative RMSE for minimization
-        mae_scorer = make_scorer(mean_absolute_error, greater_is_better=False)  # Negative MAE
-        r2_scorer = make_scorer(r2_score)
-
-        # Example: Your model pipeline (replace with your StackingRegressor or other model)
-        # model = Pipeline(steps=[('preprocessor', preprocessor), ('regressor', StackingRegressor(...))])
-
-        # Perform cross-validation with multiple metrics
-        cv_folds = 5
-        scores_rmse = cross_val_score(model, X, y, cv=cv_folds, scoring=rmse_scorer)
-        scores_mae = cross_val_score(model, X, y, cv=cv_folds, scoring=mae_scorer)
-        scores_r2 = cross_val_score(model, X, y, cv=cv_folds, scoring=r2_scorer)
-
-        # Print mean and std for robust validation
-        print("Robust Cross-Validation Results:")
-        print(f"RMSE: Mean = {-np.mean(scores_rmse):.4f}, Std = {np.std(scores_rmse):.4f}")
-        print(f"MAE: Mean = {-np.mean(scores_mae):.4f}, Std = {np.std(scores_mae):.4f}")
-        print(f"R²: Mean = {np.mean(scores_r2):.4f}, Std = {np.std(scores_r2):.4f}")
-
-        # Optional: Fit on train and evaluate on test with all metrics
-        model.fit(X_train, y_train)
-        
-        print("\nTest Metrics (Prioritizing RMSE/MAE):")
-        print(f"RMSE: {rmse(y_test, y_pred):.4f}")
-        print(f"MAE: {mean_absolute_error(y_test, y_pred):.4f}")
-        print(f"R²: {r2_score(y_test, y_pred):.4f}")
-
-        y_test_pred = model.predict(X_test)
-        metrics = {
-            "MAE": mean_absolute_error(y_test, y_test_pred),
-            "MSE": mean_squared_error(y_test, y_test_pred),
-            "RMSE": root_mean_squared_error(y_test, y_test_pred),
-            "r2": r2_score(y_test, y_test_pred),
+        y_pred = model.predict(X) # type: ignore
+        return {
+            "mae": mean_absolute_error(y, y_pred),
+            "mse": mean_squared_error(y, y_pred),
+            "rmse": float(np.sqrt(mean_squared_error(y, y_pred))),
+            "r2": r2_score(y, y_pred),
         }
-        logging.info(f"Final Test Metrics for {model_name}:")
-        for metric_name, metric_value in metrics.items():
-            logging.info(f"{metric_name}: {metric_value}")
-        return metrics
 
-        
+    def evaluate_original_scale(
+        self, model: object, X: pd.DataFrame, y_log: pd.Series
+    ) -> Dict[str, float]:
+        y_pred_log = model.predict(X) # type: ignore
+        y_pred = np.clip(np.expm1(y_pred_log), 0, None)
+        y_true = np.expm1(y_log)
+        absolute_percentage_error = (
+            np.abs(y_true - y_pred) / np.maximum(y_true, 1e-8)
+        ) * 100
+        return {
+            "mae_shares": mean_absolute_error(y_true, y_pred),
+            "mape": mean_absolute_percentage_error(y_true, y_pred),
+            "median_absolute_percentage_error": float(np.median(absolute_percentage_error)),
+            "r2_log": r2_score(y_log, y_pred_log),
+        }
+
+    @staticmethod
+    def save_model(model: object, output_path: Path) -> None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        joblib.dump(model, output_path)
+
+    def _lgb_params(self, **overrides) -> dict:
+        params = {
+            "objective": "regression",
+            "random_state": self.random_state,
+            "verbose": -1,
+            "n_jobs": -1,
+        }
+        if self.use_gpu:
+            params["device"] = "gpu"
+        params.update(overrides)
+        return params
